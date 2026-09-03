@@ -1,4 +1,6 @@
 """
+validar
+
 Camada de acesso ao banco de dados.
 
 Usa SQLAlchemy, então funciona com PostgreSQL, MySQL, SQL Server, SQLite
