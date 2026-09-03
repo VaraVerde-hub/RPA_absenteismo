@@ -1,0 +1,8 @@
+pandas
+SQLAlchemy
+python-dotenv
+
+# Descomente o driver do seu banco:
+# psycopg2-binary   # PostgreSQL
+# pymysql           # MySQL
+# pyodbc            # SQL Server
