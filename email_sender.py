@@ -1,61 +1,26 @@
-"""
-Envio do relatório de absenteísmo por email (HTML com tabela).
-"""
-
+"""SMTP mail delivery; disabled unless explicitly requested by main."""
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-import pandas as pd
-
+import ssl
+from email.message import EmailMessage
 import config
 
+def montar_html(resumo):
+    body = "<p>Nenhum registro no período.</p>" if resumo.empty else resumo.to_html(index=False, escape=True)
+    return "<h2>Relatório de absenteísmo</h2>" + body + "<p>Confidencial — uso autorizado de RH.</p>"
 
-def _montar_html(resumo: pd.DataFrame, detalhado: pd.DataFrame) -> str:
-    if resumo.empty:
-        corpo_tabela = "<p>Nenhum registro encontrado no período.</p>"
-    else:
-        corpo_tabela = resumo.to_html(index=False, justify="left")
-
-    return f"""
-    <html>
-      <body>
-        <h2>Relatório Diário de Absenteísmo</h2>
-        <p>Resumo por funcionário (atrasos e saídas antecipadas):</p>
-        {corpo_tabela}
-        <br>
-        <p style="font-size: 12px; color: #666;">
-            Relatório gerado automaticamente. Este email contém dados
-            confidenciais de RH — não encaminhar sem autorização.
-        </p>
-      </body>
-    </html>
-    """
-
-
-def enviar_relatorio(resumo: pd.DataFrame, detalhado: pd.DataFrame):
-    if not config.SMTP_USER or not config.SMTP_PASSWORD:
-        raise RuntimeError(
-            "SMTP_USER / SMTP_PASSWORD não configurados. Defina as "
-            "variáveis de ambiente antes de rodar a automação."
-        )
-    if not config.EMAIL_DESTINATARIOS:
-        raise RuntimeError(
-            "EMAIL_DESTINATARIOS não configurado. Defina a variável de "
-            "ambiente com os emails separados por vírgula."
-        )
-
-    msg = MIMEMultipart("alternative")
+def enviar_relatorio(resumo, detalhado=None):
+    if not all([config.SMTP_HOST, config.SMTP_USER, config.SMTP_PASSWORD, config.EMAIL_DESTINATARIOS]):
+        raise RuntimeError("SMTP settings incomplete; refusing to send")
+    msg = EmailMessage()
     msg["Subject"] = config.EMAIL_ASSUNTO
     msg["From"] = config.SMTP_USER
     msg["To"] = ", ".join(config.EMAIL_DESTINATARIOS)
-
-    html = _montar_html(resumo, detalhado)
-    msg.attach(MIMEText(html, "html"))
-
-    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as servidor:
-        servidor.starttls()
-        servidor.login(config.SMTP_USER, config.SMTP_PASSWORD)
-        servidor.sendmail(config.SMTP_USER, config.EMAIL_DESTINATARIOS, msg.as_string())
-
-    print(f"Email enviado com sucesso para: {', '.join(config.EMAIL_DESTINATARIOS)}")
+    msg.set_content("Relatório de absenteísmo. Visualize a versão HTML.")
+    msg.add_alternative(montar_html(resumo), subtype="html")
+    # STARTTLS requires a verified TLS handshake before authentication.
+    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as server:
+        server.ehlo()
+        server.starttls(context=ssl.create_default_context())
+        server.ehlo()
+        server.login(config.SMTP_USER, config.SMTP_PASSWORD)
+        server.send_message(msg)
